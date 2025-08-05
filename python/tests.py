@@ -2,7 +2,7 @@ import unittest
 import socket
 import requests
 
-from unittest.mock import MagicMock
+from unittest.mock import patch, MagicMock
 from socketserver import TCPServer
 from threading import Thread
 from kubernetes import client
@@ -69,17 +69,16 @@ class TestAppHandler(unittest.TestCase):
         host, port = self.mock_server.server_address
         return f"http://{host}:{port}/{target}"
 
-    def test_status_ok(self):
+    @patch("app.app.get_kubernetes_version")
+    def test_status_ok(self, mock_get_version):
+        mock_get_version.return_value = "v1.29.0"
+
         resp = requests.get(self._get_url("status"))
         self.assertEqual(resp.status_code, 200)
 
         data = resp.json()
-        self.assertIn("connected to K8s API Server", data)
-        self.assertIn("kubernetes_version", data)
-
-        # connected should be True (assuming kubeconfig is valid and cluster is reachable)
-        self.assertIsInstance(data["connected to K8s API Server"], bool)
-        self.assertIsInstance(data["kubernetes_version"], str)
+        self.assertEqual(data["connected to K8s API Server"], True)
+        self.assertEqual(data["kubernetes_version"], "v1.29.0")
 
 
     def test_deployment_health(self):
