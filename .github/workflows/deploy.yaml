@@ -3,6 +3,10 @@ name: Build and Deploy SRE tool (Python)
 on:
   push:
     branches: [main]
+    paths:
+      - 'python/**'
+    paths-ignore:
+      - 'python/README.md'
 
 jobs:
   build-test-deploy:
