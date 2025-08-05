@@ -12,13 +12,13 @@ python main.py --kubeconfig ~/.kube/config --address 127.0.0.1:8080
 
 ### Scenarios covered
 
-As an SRE I want to know whether all the deployments in the k8s cluster have as many healthy pods as requested by the respective `Deployment` spec:
+1. As an SRE I want to know whether all the deployments in the k8s cluster have as many healthy pods as requested by the respective `Deployment` spec:
 
 ```
 curl http://127.0.0.1:8080/deployment-health
 ```
 
-As an SRE I want to prevent two workloads defined by k8s namespace(s) and label selectors from being able to exchange any network activity on demand:
+2. As an SRE I want to prevent two workloads defined by k8s namespace(s) and label selectors from being able to exchange any network activity on demand:
 
 ```
 curl -X POST http://127.0.0.1:8080/block-traffic \
@@ -31,33 +31,36 @@ curl -X POST http://127.0.0.1:8080/block-traffic \
   }'
 ```
 
-As an SRE I want to always know whether this tool can successfully communicate with the configured k8s API server:
+3. As an SRE I want to always know whether this tool can successfully communicate with the configured k8s API server:
 
 ```
 curl http://127.0.0.1:8080/status
 
-I changed the existing /healthz endpoint to /status as this sounds more meaningful. This will return if its connected to the K8s API server and the version of the same.
+I changed the existing /healthz endpoint to /status as this sounds more meaningful.
+This will return if its connected to the K8s API server and the version of the same.
 ```
 
-As an application developer I want to build this application into a container image when I push a commit to the `main` branch of its repository:
+4. As an application developer I want to build this application into a container image when I push a commit to the `main` branch of its repository:
 
 ```
 A GHA workflow created under .github/workflows/deploy.yaml to build the image on push to main branch.
 As an addon, I have also added a step to perform helm deployment, to test it out on my local minikube cluster, and it worked.
 ```
 
-As an application developer I want to be able to deploy this application into a Kubernetes cluster using Helm:
+5. As an application developer I want to be able to deploy this application into a Kubernetes cluster using Helm:
 
 ```
 Build the image using present Dockerfile
 
 docker build -t tyk-sre-tool:latest .
 
-Then, use Helm chart created under /python directory for deployment purpose. Proper permissions have been added as RBAC to make sure it has the required access to perform the needed operation on the cluster.
+Then, use Helm chart created under /python directory for deployment purpose. Proper permissions have been added as RBAC,
+to make sure it has the required access to perform the needed operation on the cluster.
 
 helm upgrade --install tyk-sre-tool ./helm-chart --namespace sre-tool --create-namespace --set image.tag=latest
 
-One ingress has also been added to expose the service behind a domain (http://tyk-sre-tool.local/). So, after you've deployed it on cluster, you can access all the above mentioned endpoints through this domain.
+One ingress has also been added to expose the service behind a domain (http://tyk-sre-tool.local/). 
+So, after you've deployed it on cluster, you can access all the above mentioned endpoints through this domain.
 ```
 
 Have added few more test cases to the existing tests.py file to cover the code changes that I made.
