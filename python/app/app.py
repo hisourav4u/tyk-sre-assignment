@@ -1,20 +1,61 @@
+import json
 import socketserver
-
 from kubernetes import client
 from http.server import BaseHTTPRequestHandler
-
 
 class AppHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Catch all incoming GET requests"""
-        if self.path == "/healthz":
-            self.healthz()
+        if self.path == "/status":
+            self.status()
+        elif self.path == "/deployment-health":
+            self.deployment_health()
         else:
             self.send_error(404)
 
-    def healthz(self):
-        """Responds with the health status of the application"""
-        self.respond(200, "ok")
+    def do_POST(self):
+        if self.path == "/block-traffic":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
+
+            from_ns = data["from_ns"]
+            from_labels = data["from_labels"]
+            to_ns = data["to_ns"]
+            to_labels = data["to_labels"]
+
+            block_traffic(from_ns, from_labels, to_ns, to_labels)
+            self.respond(200, json.dumps({"status": "policy_created"}))
+        else:
+            self.send_error(404)
+
+    def status(self):
+        try:
+            version = get_kubernetes_version(client.ApiClient())
+            response = {
+                "connected to K8s API Server": True,
+                "kubernetes_version": version
+            }
+            self.respond(200, json.dumps(response))
+        except Exception as e:
+            response = {
+                "connected to K8s API Server": False,
+                "error": str(e)
+            }
+            self.respond(500, json.dumps(response))
+
+
+    def deployment_health(self):
+        apps_v1 = client.AppsV1Api()
+        ret = apps_v1.list_deployment_for_all_namespaces()
+        unhealthy = []
+        for dep in ret.items:
+            desired = dep.spec.replicas
+            available = dep.status.available_replicas or 0
+            if desired != available:
+                unhealthy.append({"name": dep.metadata.name, "namespace": dep.metadata.namespace,
+                                  "desired": desired, "available": available})
+        self.respond(200, json.dumps({"unhealthy_deployments": unhealthy}))
 
     def respond(self, status: int, content: str):
         """Writes content and status code to the response socket"""
@@ -52,3 +93,58 @@ def start_server(address):
     with socketserver.TCPServer((host, int(port)), AppHandler) as httpd:
         print("Server listening on {}".format(address))
         httpd.serve_forever()
+
+def block_traffic(from_ns, from_labels, to_ns, to_labels):
+    """
+    Creates network policies to block traffic between two sets of workloads.
+    from_ns: Namespace of the source workloads.
+    from_labels: Labels of the source workloads.
+    to_ns: Namespace of the destination workloads.
+    to_labels: Labels of the destination workloads.
+
+    """
+    networking_v1 = client.NetworkingV1Api()
+
+    np1 = client.V1NetworkPolicy(
+        metadata=client.V1ObjectMeta(
+            name="block-{}-to-{}".format(from_labels["app"], to_labels["app"]),
+            namespace=from_ns),
+        spec=client.V1NetworkPolicySpec(
+            pod_selector=client.V1LabelSelector(match_labels=from_labels),
+            policy_types=["Egress"],
+            egress=[client.V1NetworkPolicyEgressRule(
+                to=[client.V1NetworkPolicyPeer(
+                    namespace_selector=client.V1LabelSelector(
+                        match_expressions=[client.V1LabelSelectorRequirement(
+                            key="namespace", operator="NotIn", values=[to_ns])]),
+                    pod_selector=client.V1LabelSelector(
+                        match_expressions=[client.V1LabelSelectorRequirement(
+                            key="app", operator="NotIn", values=[to_labels["app"]])])
+                )]
+            )]
+        )
+    )
+
+    np2 = client.V1NetworkPolicy(
+        metadata=client.V1ObjectMeta(
+            name="block-{}-to-{}".format(to_labels["app"], from_labels["app"]),
+            namespace=to_ns),
+        spec=client.V1NetworkPolicySpec(
+            pod_selector=client.V1LabelSelector(match_labels=to_labels),
+            policy_types=["Egress"],
+            egress=[client.V1NetworkPolicyEgressRule(
+                to=[client.V1NetworkPolicyPeer(
+                    namespace_selector=client.V1LabelSelector(
+                        match_expressions=[client.V1LabelSelectorRequirement(
+                            key="namespace", operator="NotIn", values=[from_ns])]),
+                    pod_selector=client.V1LabelSelector(
+                        match_expressions=[client.V1LabelSelectorRequirement(
+                            key="app", operator="NotIn", values=[from_labels["app"]])])
+                )]
+            )]
+        )
+    )
+
+    networking_v1.create_namespaced_network_policy(namespace=from_ns, body=np1)
+    networking_v1.create_namespaced_network_policy(namespace=to_ns, body=np2)
+    

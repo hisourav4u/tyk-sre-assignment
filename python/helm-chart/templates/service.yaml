@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tyk-sre-tool
+spec:
+  selector:
+    app: tyk-sre-tool
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 8080

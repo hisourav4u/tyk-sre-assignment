@@ -15,10 +15,14 @@ if __name__ == "__main__":
                         help="HTTP server listen address")
     args = parser.parse_args()
 
-    if args.kubeconfig != "":
-        config.load_kube_config(config_file=args.kubeconfig)
-    else:
-        config.load_incluster_config()
+    try:
+        if args.kubeconfig:
+            config.load_kube_config(config_file=args.kubeconfig)
+        else:
+            config.load_incluster_config()
+    except Exception as e:
+        print("Error loading Kubernetes configuration:", e)
+        sys.exit(1)
 
     api_client = client.ApiClient()
 

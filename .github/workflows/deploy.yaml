@@ -1,0 +1,52 @@
+name: Build and Deploy SRE tool (Python)
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Extract short commit SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          python tests.py
+
+      - name: Build Docker image
+        run: |
+          docker build -t my-app:${{ steps.vars.outputs.sha_short }} .
+
+      # below step is kind of an addon to the original request. This I added to deploy the app using Helm on my local minikube cluster to verify (using act)
+      - name: Deploy via Helm
+        run: |
+          helm upgrade --install tyk-sre-tool ./helm-chart \
+            --namespace sre-tool --create-namespace \
+            --set image.tag=${{ steps.vars.outputs.sha_short }}
+

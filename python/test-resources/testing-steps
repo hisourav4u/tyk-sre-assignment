@@ -1,0 +1,42 @@
+# start minikube with calico CNI and enable ingress
+
+minikube start --cni=calico
+minikube addons enable ingress
+
+# create two namespaces
+kubectl create ns ns-1
+kubectl create ns ns-2
+
+# create deployments and services in the namespaces
+kubectl create deployment app2 -n ns-2 --image=nginx:alpine
+kubectl create deployment app1 -n ns-1 --image=nginx:alpine
+kubectl create deployment app1-1 -n ns-1 --image=nginx:alpine
+kubectl create deployment app2-1 -n ns-2 --image=nginx:alpine
+kubectl expose deployment app2 -n ns-2 --port=80
+kubectl expose deployment app2-1 -n ns-2 --port=80
+kubectl expose deployment app1-1 -n ns-1 --port=80
+kubectl expose deployment app1 -n ns-1 --port=80
+
+# run the python program as script
+
+python -m venv .venv
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py --kubeconfig ~/.kube/config --address 127.0.0.1:8080
+
+# tests
+
+curl http://127.0.0.1:8080/status
+
+curl http://127.0.0.1:8080/deployment-health
+
+curl -X POST http://127.0.0.1:8080/block-traffic \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from_ns": "ns-1",
+    "from_labels": {"app": "app1"},
+    "to_ns": "ns-2",
+    "to_labels": {"app": "app2"}
+  }'
+

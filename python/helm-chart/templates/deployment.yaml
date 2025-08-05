@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tyk-sre-tool
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: tyk-sre-tool
+  template:
+    metadata:
+      labels:
+        app: tyk-sre-tool
+    spec:
+      serviceAccountName: tyk-sre-sa
+      containers:
+      - name: tyk-sre-tool
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8080
+          

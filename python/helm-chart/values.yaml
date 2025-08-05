@@ -1,0 +1,17 @@
+replicaCount: 2
+image:
+  repository: tyk-sre-tool
+  tag: latest
+  pullPolicy: Never
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  host: tyk-sre-tool.local
+  path: /
+  service:
+    name: tyk-sre-tool
+    port: 8080
