@@ -10,6 +10,9 @@ class AppHandler(BaseHTTPRequestHandler):
             self.status()
         elif self.path == "/deployment-health":
             self.deployment_health()
+        elif self.path == "/list-blocks":
+            blocks = list_traffic_blocks()
+            self.respond(200, json.dumps({"blocks": blocks}))
         else:
             self.send_error(404)
 
@@ -26,6 +29,20 @@ class AppHandler(BaseHTTPRequestHandler):
 
             block_traffic(from_ns, from_labels, to_ns, to_labels)
             self.respond(200, json.dumps({"status": "policy_created"}))
+
+        elif self.path == "/unblock-traffic":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
+
+            from_ns = data["from_ns"]
+            from_labels = data["from_labels"]
+            to_ns = data["to_ns"]
+            to_labels = data["to_labels"]
+
+            result = unblock_traffic(from_ns, from_labels, to_ns, to_labels)
+            self.respond(200, json.dumps(result))
+
         else:
             self.send_error(404)
 
@@ -148,3 +165,46 @@ def block_traffic(from_ns, from_labels, to_ns, to_labels):
     networking_v1.create_namespaced_network_policy(namespace=from_ns, body=np1)
     networking_v1.create_namespaced_network_policy(namespace=to_ns, body=np2)
     
+def unblock_traffic(from_ns, from_labels, to_ns, to_labels):
+    """
+    Deletes the network policies created by block_traffic().
+    """
+    networking_v1 = client.NetworkingV1Api()
+
+    policy1 = f"block-{from_labels['app']}-to-{to_labels['app']}"
+    policy2 = f"block-{to_labels['app']}-to-{from_labels['app']}"
+
+    results = {}
+
+    for ns, name in [(from_ns, policy1), (to_ns, policy2)]:
+        try:
+            networking_v1.delete_namespaced_network_policy(
+                name=name,
+                namespace=ns
+            )
+            results[name] = "deleted"
+        except ApiException as e:
+            if e.status == 404:
+                results[name] = "not_found"
+            else:
+                results[name] = f"error: {e.reason}"
+
+    return results
+
+def list_traffic_blocks():
+    """
+    Lists all active block traffic policies created by block_traffic().
+    Returns a list of dicts with namespace and policy name.
+    """
+    networking_v1 = client.NetworkingV1Api()
+    all_policies = networking_v1.list_network_policy_for_all_namespaces()
+    
+    blocks = []
+    for policy in all_policies.items:
+        if policy.metadata.name.startswith("block-"):
+            blocks.append({
+                "namespace": policy.metadata.namespace,
+                "name": policy.metadata.name
+            })
+    
+    return blocks
