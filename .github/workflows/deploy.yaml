@@ -44,7 +44,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t my-app:${{ steps.vars.outputs.sha_short }} .
+          docker build -t tyk-sre-tool:${{ steps.vars.outputs.sha_short }} .
 
       # below step is kind of an addon to the original request. This I added to deploy the app using Helm on my local minikube cluster to verify (using act)
       # - name: Deploy via Helm
